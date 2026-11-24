@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: claims-service
+
+server:
+  port: ${PORT:8081}
+
+# ---- Everything InsureLog needs ----
+insurelog:
+  server:
+    url: ${INSURELOG_SERVER_URL:http://localhost:8080}
+    api-key: ${INSURELOG_API_KEY:}
+  console:
+    enabled: false
+
+demo:
+  traffic:
+    enabled: ${DEMO_TRAFFIC:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}

@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: insurelog-server
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+insurelog:
+  storage:
+    directory: ${LOG_DIR:logs}
+    retention-days: ${RETENTION_DAYS:90}
+    memory-capacity: ${MEMORY_CAPACITY:50000}
+  security:
+    # When set, every /api/* request needs the header X-API-Key
+    api-key: ${INSURELOG_API_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

@@ -3,7 +3,15 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: insurance-logging-system
-    metrics_path: /metrics
+  # Central server: business metrics for every microservice
+  - job_name: insurelog-server
+    metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ["insurelog:8080"]
+      - targets: ["insurelog-server:8080"]
+
+  # Microservices using the starter: shipper health, JVM, HTTP
+  # Add each of your services here
+  - job_name: microservices
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["claims-service:8081"]

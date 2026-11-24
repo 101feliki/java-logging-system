@@ -3,11 +3,12 @@
   "title": "Insurance Logging System",
   "tags": [
     "insurance",
-    "logging"
+    "logging",
+    "microservices"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "time": {
     "from": "now-1h",
@@ -31,7 +32,7 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Events / second",
+      "title": "Services reporting",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -49,7 +50,53 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(insurelog_events_total[5m]))",
+          "expr": "count(count by (service) (insurelog_events_total{application=\"insurelog-server\",service=~\"$service\"}))",
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "description": "Microservices that have sent events"
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Events / second",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(insurelog_events_total{application=\"insurelog-server\",service=~\"$service\"}[5m]))",
           "legendFormat": ""
         }
       ],
@@ -74,7 +121,7 @@
       }
     },
     {
-      "id": 3,
+      "id": 4,
       "type": "stat",
       "title": "Claims submitted",
       "datasource": {
@@ -82,7 +129,7 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 4,
+        "x": 8,
         "y": 1,
         "w": 4,
         "h": 4
@@ -94,7 +141,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(insurelog_claims_total{outcome=\"submitted\"}[$__range]))",
+          "expr": "sum(increase(insurelog_claims_total{application=\"insurelog-server\",service=~\"$service\",outcome=\"submitted\"}[$__range]))",
           "legendFormat": ""
         }
       ],
@@ -117,10 +164,10 @@
         "textMode": "auto",
         "justifyMode": "auto"
       },
-      "description": "Claims submitted in the selected time range"
+      "description": "In the selected time range"
     },
     {
-      "id": 4,
+      "id": 5,
       "type": "stat",
       "title": "Claim approval rate",
       "datasource": {
@@ -128,7 +175,7 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 8,
+        "x": 12,
         "y": 1,
         "w": 4,
         "h": 4
@@ -140,7 +187,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(insurelog_claims_total{outcome=\"approved\"}[$__range])) / clamp_min(sum(increase(insurelog_claims_total{outcome=~\"approved|rejected\"}[$__range])), 1)",
+          "expr": "sum(increase(insurelog_claims_total{application=\"insurelog-server\",service=~\"$service\",outcome=\"approved\"}[$__range])) / clamp_min(sum(increase(insurelog_claims_total{application=\"insurelog-server\",service=~\"$service\",outcome=~\"approved|rejected\"}[$__range])), 1)",
           "legendFormat": ""
         }
       ],
@@ -180,18 +227,18 @@
         "textMode": "auto",
         "justifyMode": "auto"
       },
-      "description": "Approved / (approved + rejected) in the selected time range"
+      "description": "Approved / (approved + rejected)"
     },
     {
-      "id": 5,
+      "id": 6,
       "type": "stat",
-      "title": "Premiums collected",
+      "title": "Premiums collected (KES)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 12,
+        "x": 16,
         "y": 1,
         "w": 4,
         "h": 4
@@ -203,7 +250,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(insurelog_amount_kes_sum{event_type=\"PREMIUM_PAID\"}[$__range]))",
+          "expr": "sum(increase(insurelog_amount_kes_sum{application=\"insurelog-server\",service=~\"$service\",event_type=\"PREMIUM_PAID\"}[$__range]))",
           "legendFormat": ""
         }
       ],
@@ -227,10 +274,10 @@
         "textMode": "auto",
         "justifyMode": "auto"
       },
-      "description": "Total premiums received (KES) in the selected time range"
+      "description": "In the selected time range"
     },
     {
-      "id": 6,
+      "id": 7,
       "type": "stat",
       "title": "Errors",
       "datasource": {
@@ -238,7 +285,7 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 16,
+        "x": 20,
         "y": 1,
         "w": 4,
         "h": 4
@@ -250,7 +297,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(insurelog_events_total{level=~\"ERROR|CRITICAL\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(insurelog_events_total{application=\"insurelog-server\",service=~\"$service\",level=~\"ERROR|CRITICAL\"}[$__range])) or vector(0)",
           "legendFormat": ""
         }
       ],
@@ -293,68 +340,9 @@
       "description": "ERROR and CRITICAL events in the selected time range"
     },
     {
-      "id": 7,
-      "type": "stat",
-      "title": "Rejected events",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 20,
-        "y": 1,
-        "w": 4,
-        "h": 4
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(insurelog_rejected_events_total[$__range])) or vector(0)",
-          "legendFormat": ""
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "description": "Events refused because they were invalid"
-    },
-    {
       "id": 8,
       "type": "row",
-      "title": "Business activity",
+      "title": "Microservices",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -367,7 +355,7 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Events per second by category",
+      "title": "Events per second by service",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -385,8 +373,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (category) (rate(insurelog_events_total[5m]))",
-          "legendFormat": "{{category}}"
+          "expr": "sum by (service) (rate(insurelog_events_total{application=\"insurelog-server\",service=~\"$service\"}[5m]))",
+          "legendFormat": "{{service}}"
         }
       ],
       "fieldConfig": {
@@ -420,7 +408,7 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Claims by outcome (per minute)",
+      "title": "Errors and warnings by service (per minute)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -438,8 +426,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (outcome) (rate(insurelog_claims_total[5m])) * 60",
-          "legendFormat": "{{outcome}}"
+          "expr": "sum by (service, level) (rate(insurelog_events_total{application=\"insurelog-server\",service=~\"$service\",level=~\"WARN|ERROR|CRITICAL\"}[5m])) * 60",
+          "legendFormat": "{{service}} {{level}}"
         }
       ],
       "fieldConfig": {
@@ -472,15 +460,28 @@
     },
     {
       "id": 11,
+      "type": "row",
+      "title": "Business activity",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
       "type": "timeseries",
-      "title": "Premiums collected by channel (KES per minute)",
+      "title": "Events per second by category",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 15,
         "w": 12,
         "h": 8
       },
@@ -491,7 +492,113 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (channel) (rate(insurelog_amount_kes_sum{event_type=\"PREMIUM_PAID\"}[5m])) * 60",
+          "expr": "sum by (category) (rate(insurelog_events_total{application=\"insurelog-server\",service=~\"$service\"}[5m]))",
+          "legendFormat": "{{category}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Claims by outcome (per minute)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (outcome) (rate(insurelog_claims_total{application=\"insurelog-server\",service=~\"$service\"}[5m])) * 60",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Premiums collected by channel (KES per minute)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (channel) (rate(insurelog_amount_kes_sum{application=\"insurelog-server\",service=~\"$service\",event_type=\"PREMIUM_PAID\"}[5m])) * 60",
           "legendFormat": "{{channel}}"
         }
       ],
@@ -524,7 +631,7 @@
       }
     },
     {
-      "id": 12,
+      "id": 15,
       "type": "timeseries",
       "title": "Claim amounts (KES)",
       "datasource": {
@@ -533,7 +640,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 14,
+        "y": 23,
         "w": 12,
         "h": 8
       },
@@ -544,7 +651,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(insurelog_amount_kes{event_type=\"CLAIM_SUBMITTED\",quantile=\"0.5\"})",
+          "expr": "max(insurelog_amount_kes{application=\"insurelog-server\",service=~\"$service\",event_type=\"CLAIM_SUBMITTED\",quantile=\"0.5\"})",
           "legendFormat": "median submitted"
         },
         {
@@ -553,7 +660,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(insurelog_amount_kes{event_type=\"CLAIM_SUBMITTED\",quantile=\"0.95\"})",
+          "expr": "max(insurelog_amount_kes{application=\"insurelog-server\",service=~\"$service\",event_type=\"CLAIM_SUBMITTED\",quantile=\"0.95\"})",
           "legendFormat": "95th percentile submitted"
         },
         {
@@ -562,7 +669,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(insurelog_amount_kes_sum{event_type=\"CLAIM_PAID\"}[5m])) * 60",
+          "expr": "sum(rate(insurelog_amount_kes_sum{application=\"insurelog-server\",service=~\"$service\",event_type=\"CLAIM_PAID\"}[5m])) * 60",
           "legendFormat": "paid out per minute"
         }
       ],
@@ -595,20 +702,20 @@
       }
     },
     {
-      "id": 13,
+      "id": 16,
       "type": "row",
-      "title": "Risk and errors",
+      "title": "Risk",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 31,
         "w": 24,
         "h": 1
       },
       "panels": []
     },
     {
-      "id": 14,
+      "id": 17,
       "type": "timeseries",
       "title": "Payment failure rate",
       "datasource": {
@@ -617,7 +724,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 32,
         "w": 8,
         "h": 8
       },
@@ -628,7 +735,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(insurelog_events_total{event_type=\"PAYMENT_FAILED\"}[5m])) / clamp_min(sum(rate(insurelog_events_total{event_type=~\"PREMIUM_PAID|PAYMENT_FAILED\"}[5m])), 0.0001)",
+          "expr": "sum(rate(insurelog_events_total{application=\"insurelog-server\",service=~\"$service\",event_type=\"PAYMENT_FAILED\"}[5m])) / clamp_min(sum(rate(insurelog_events_total{application=\"insurelog-server\",service=~\"$service\",event_type=~\"PREMIUM_PAID|PAYMENT_FAILED\"}[5m])), 0.0001)",
           "legendFormat": "failure rate"
         }
       ],
@@ -661,60 +768,7 @@
       }
     },
     {
-      "id": 15,
-      "type": "timeseries",
-      "title": "Warnings and errors by level",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 8,
-        "y": 23,
-        "w": 8,
-        "h": 8
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (level) (rate(insurelog_events_total{level=~\"WARN|ERROR|CRITICAL\"}[5m])) * 60",
-          "legendFormat": "{{level}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 15,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 16,
+      "id": 18,
       "type": "timeseries",
       "title": "Security events (per minute)",
       "datasource": {
@@ -722,8 +776,8 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 16,
-        "y": 23,
+        "x": 8,
+        "y": 32,
         "w": 8,
         "h": 8
       },
@@ -734,7 +788,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (event_type) (rate(insurelog_events_total{category=\"SECURITY\"}[5m])) * 60",
+          "expr": "sum by (event_type) (rate(insurelog_events_total{application=\"insurelog-server\",service=~\"$service\",category=\"SECURITY\"}[5m])) * 60",
           "legendFormat": "{{event_type}}"
         }
       ],
@@ -767,28 +821,15 @@
       }
     },
     {
-      "id": 17,
-      "type": "row",
-      "title": "Service health",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 31,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 18,
+      "id": 19,
       "type": "timeseries",
-      "title": "Ingest latency",
+      "title": "Rejected (invalid) events per minute",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 0,
+        "x": 16,
         "y": 32,
         "w": 8,
         "h": 8
@@ -800,7 +841,180 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(insurelog_ingest_seconds{quantile=\"0.5\"})",
+          "expr": "sum by (reason) (rate(insurelog_rejected_events_total{application=\"insurelog-server\"}[5m])) * 60",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Pipeline health",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Shipper queue in each service",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (application) (insurelog_shipper_queue_size)",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Events waiting to be sent to the server; growing means the server is slow or unreachable"
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Events dropped by services (per minute)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 41,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (application) (rate(insurelog_shipper_dropped_total[5m])) * 60",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Server ingest latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 41,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(insurelog_ingest_seconds{application=\"insurelog-server\",quantile=\"0.5\"})",
           "legendFormat": "p50"
         },
         {
@@ -809,7 +1023,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(insurelog_ingest_seconds{quantile=\"0.95\"})",
+          "expr": "max(insurelog_ingest_seconds{application=\"insurelog-server\",quantile=\"0.95\"})",
           "legendFormat": "p95"
         },
         {
@@ -818,7 +1032,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(insurelog_ingest_seconds{quantile=\"0.99\"})",
+          "expr": "max(insurelog_ingest_seconds{application=\"insurelog-server\",quantile=\"0.99\"})",
           "legendFormat": "p99"
         }
       ],
@@ -851,17 +1065,17 @@
       }
     },
     {
-      "id": 19,
+      "id": 24,
       "type": "timeseries",
-      "title": "JVM heap used",
+      "title": "HTTP requests per second by app",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 8,
-        "y": 32,
-        "w": 8,
+        "x": 18,
+        "y": 41,
+        "w": 6,
         "h": 8
       },
       "targets": [
@@ -871,17 +1085,61 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(jvm_memory_used_bytes{area=\"heap\"})",
-          "legendFormat": "used"
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count[5m]))",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "JVM heap used by app",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
         {
-          "refId": "B",
+          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(jvm_memory_max_bytes{area=\"heap\"})",
-          "legendFormat": "max"
+          "expr": "sum by (application) (jvm_memory_used_bytes{area=\"heap\"})",
+          "legendFormat": "{{application}}"
         }
       ],
       "fieldConfig": {
@@ -913,17 +1171,17 @@
       }
     },
     {
-      "id": 20,
-      "type": "stat",
-      "title": "Uptime",
+      "id": 26,
+      "type": "timeseries",
+      "title": "CPU usage by app",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 16,
-        "y": 32,
-        "w": 4,
+        "x": 12,
+        "y": 49,
+        "w": 12,
         "h": 8
       },
       "targets": [
@@ -933,78 +1191,70 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(process_uptime_seconds)",
-          "legendFormat": ""
+          "expr": "max by (application) (process_cpu_usage)",
+          "legendFormat": "{{application}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      }
-    },
-    {
-      "id": 21,
-      "type": "stat",
-      "title": "CPU usage",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 20,
-        "y": 32,
-        "w": 4,
-        "h": 8
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "max(process_cpu_usage)",
-          "legendFormat": ""
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto",
-        "justifyMode": "auto"
       }
     }
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(insurelog_events_total{application=\"insurelog-server\"}, service)",
+          "refId": "service"
+        },
+        "definition": "label_values(insurelog_events_total{application=\"insurelog-server\"}, service)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
   },
   "annotations": {
     "list": []

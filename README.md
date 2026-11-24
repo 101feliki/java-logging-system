@@ -1,10 +1,11 @@
-# Insurance Logging System
+# InsureLog: Insurance Logging System
 
-A Java logging service for insurance systems. It records policy, claim, payment, underwriting, customer and security events as structured logs, **masks personal data automatically**, keeps searchable daily log files, and exposes **Prometheus metrics that Grafana turns into a live dashboard**.
+A **plug-and-play logging toolkit for insurance microservices**, built with **Java 17 and Spring Boot 3**.
 
-Ships as a single runnable **`.jar`**: use it as a server that any app (Java, Node, Python, PHP...) sends events to over HTTP, or add it to a Java project as a library.
+Add one dependency to any Spring Boot service and it immediately gets structured insurance events, **automatic personal-data masking**, **correlation IDs that follow a customer across services**, business metrics in Actuator, and background shipping to a **central server** with search, export and a **Grafana dashboard**.
 
-![Java](https://img.shields.io/badge/java-%23ED8B00.svg?style=for-the-badge&logo=openjdk&logoColor=white)
+![Java](https://img.shields.io/badge/java_17-%23ED8B00.svg?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot_3-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
 ![Maven](https://img.shields.io/badge/Maven-C71A36?style=for-the-badge&logo=apachemaven&logoColor=white)
 ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=Prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/grafana-%23F46800.svg?style=for-the-badge&logo=grafana&logoColor=white)
@@ -12,43 +13,186 @@ Ships as a single runnable **`.jar`**: use it as a server that any app (Java, No
 
 ---
 
-## Features
+## Why
 
-- **Insurance-specific events**: categories `POLICY`, `CLAIM`, `PAYMENT`, `UNDERWRITING`, `CUSTOMER`, `SECURITY`, `SYSTEM`, with policy number, claim ID, customer ID, product, amount, currency and channel (M-Pesa, card, bank, USSD...)
-- **Personal data masking** before anything is stored, to support Kenya's Data Protection Act:
-  - emails: `jane.doe@example.com` -> `j***@example.com`
-  - phone numbers: `0712345678` -> `*******678`
-  - card numbers keep only the last 4 digits
-  - attributes like `nationalId`, `KRA PIN`, `password`, `otp` are replaced with `[REDACTED]`
-- **Daily JSON-lines log files** (`logs/insurance-YYYY-MM-DD.log`) with automatic deletion after the retention period
-- **Search API** by level, category, event type, policy, claim, customer and time range
-- **Export** to CSV (safe against spreadsheet formula injection) or JSON for audits
-- **Prometheus `/metrics`** with business metrics (events, claims by outcome, premiums and claim amounts) plus JVM and CPU metrics
-- **Ready-made Grafana dashboard**, provisioned automatically with Docker Compose
-- **Validation** with clear error messages; batches of up to 500 events per request
-- Optional **API key** protection
-- Built-in **traffic simulator** to see the dashboard working straight away
+Insurance platforms are made of many moving parts: policy, underwriting, payments (M-Pesa, card, bank), claims, notifications, integrations. When a customer says "my claim payout never arrived", you need to follow that one journey through every service, without exposing their phone number or ID in the logs. InsureLog does that with almost no code in each service.
+
+## Architecture
+
+```
+ ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+ │ policy-service │  │ claims-service │  │payments-service│   any Spring Boot service
+ │  + starter     │  │  + starter     │  │  + starter     │   (or anything that can POST JSON)
+ └───────┬────────┘  └───────┬────────┘  └───────┬────────┘
+         │  X-Correlation-Id passed along on every call   │
+         └──────────── batched, async HTTP ───────────────┘
+                              │
+                     ┌────────▼─────────┐        ┌────────────┐     ┌─────────┐
+                     │ insurelog-server │◀───────│ Prometheus │────▶│ Grafana │
+                     │ search · export  │ scrape └────────────┘     └─────────┘
+                     │ trace · Swagger  │
+                     └──────────────────┘
+```
+
+| Module | What it is |
+|---|---|
+| `insurelog-core` | Framework-free library: event model, PII masking, validation, file storage, HTTP shipper, Micrometer metrics |
+| `insurelog-spring-boot-starter` | **The plug-and-play part.** Auto-configures everything in any Spring Boot service |
+| `insurelog-server` | Central Spring Boot service: ingest, search, trace a journey, CSV/JSON export, Swagger, Actuator |
+| `demo-claims-service` | Example microservice using the starter, with optional live demo traffic |
 
 ---
 
-## Quick start
+## Plug it into a microservice (2 steps)
 
-### Option 1: run the jar
+**1. Add the dependency**
 
-Requires Java 17 or newer. Download `insurance-logging-system-1.0.0.jar` from the [Releases](../../releases) page, or build it:
+```xml
+<dependency>
+  <groupId>com.felixkariuki</groupId>
+  <artifactId>insurelog-spring-boot-starter</artifactId>
+  <version>2.0.0</version>
+</dependency>
+```
+
+**2. Point it at the server** (optional; without it, events go to the service's own log)
+
+```yaml
+spring:
+  application:
+    name: claims-service
+
+insurelog:
+  server:
+    url: http://insurelog-server:8080
+```
+
+That's it. Now inject `InsuranceLogger` anywhere:
+
+```java
+@Service
+public class ClaimService {
+
+    private final InsuranceLogger insureLog;
+
+    public ClaimService(InsuranceLogger insureLog) {
+        this.insureLog = insureLog;
+    }
+
+    public void submit(Claim claim) {
+        // ... business logic ...
+        insureLog.claimSubmitted(claim.id(), claim.policyNumber(), claim.amount(), "mpesa");
+    }
+
+    public void approve(Claim claim) {
+        insureLog.claimDecision(claim.id(), claim.policyNumber(), true, claim.amount(), "assessor J. Otieno");
+    }
+}
+```
+
+Or log any event with the builder:
+
+```java
+insureLog.log(LogEvent.builder(Category.UNDERWRITING, "RISK_ASSESSED")
+        .policy("POL-1001")
+        .customer("CUS-42")
+        .message("Risk score 0.32 for customer on 0712345678")   // phone is masked automatically
+        .attributes(Map.of("nationalId", "12345678"))             // becomes [REDACTED]
+        .build());
+```
+
+### What the starter does automatically
+
+| Feature | Details |
+|---|---|
+| **Service name** | Every event is stamped with `spring.application.name` |
+| **Correlation IDs** | Reads `X-Correlation-Id` from incoming requests (or creates one), puts it in the MDC, returns it in the response, and **adds it to outgoing `RestTemplate` and `RestClient` calls**, so the next service logs under the same ID |
+| **PII masking** | Phones (`0712345678` → `*******678`), emails (`j***@example.com`), card numbers (last 4 kept), and attributes like `nationalId`, `KRA PIN`, `password`, `otp` → `[REDACTED]` |
+| **Never breaks your service** | Async, batched shipping with a bounded queue; if the server is down, events are retried and then dropped (and counted) rather than blocking requests. A failing sink can't throw into business code |
+| **Metrics** | `insurelog_*` metrics in your service's own Actuator (`/actuator/prometheus`), plus shipper queue/sent/dropped |
+| **Health** | `/actuator/health` shows an `insureLog` section with sent, dropped and queued counts |
+| **Extensible** | Define any `EventSink` bean (Kafka, database, SIEM...) and it is added automatically |
+
+### Configuration
+
+```yaml
+insurelog:
+  enabled: true                 # switch everything off with false
+  service-name: claims-service  # default: spring.application.name
+  throw-on-invalid: false       # default: invalid events are skipped with a warning
+  console:
+    enabled: true               # JSON line per event in the app log (logger "insurelog")
+  file:
+    enabled: false              # local daily files as well
+    directory: logs/insurelog
+    retention-days: 30
+  server:
+    url: http://insurelog-server:8080
+    api-key: ${INSURELOG_API_KEY:}
+    batch-size: 100
+    flush-interval: 2s
+    queue-capacity: 10000
+    max-retries: 3
+  correlation:
+    enabled: true
+    header: X-Correlation-Id
+    mdc-key: correlationId      # use %X{correlationId} in your log pattern
+```
+
+### Not using Spring?
+
+Use `insurelog-core` directly from any Java app:
+
+```java
+InsuranceLogger log = InsuranceLogger.builder()
+        .service("batch-renewals")
+        .sink(new HttpShipper("http://insurelog-server:8080", null, 100, Duration.ofSeconds(2), 10_000, 3))
+        .build();
+```
+
+Services in other languages (Node, Python, PHP...) can send JSON straight to `POST /api/logs`.
+
+---
+
+## The central server
 
 ```bash
-mvn package                        # creates target/insurance-logging-system-1.0.0.jar
-java -jar target/insurance-logging-system-1.0.0.jar
+java -jar insurelog-server-2.0.0.jar
 ```
 
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/logs` | One event or an array of up to 500 |
+| `GET` | `/api/logs` | Search, newest first: `level` (minimum), `category`, `eventType`, `service`, `correlationId`, `policyNumber`, `claimId`, `customerId`, `since`, `until`, `limit` |
+| `GET` | `/api/logs/trace/{correlationId}` | **One customer journey across every service, in order** |
+| `GET` | `/api/logs/export` | Download `format=csv` (default) or `format=json` |
+| `GET` | `/api/stats` | Counts by service, category and level |
+| `GET` | `/swagger-ui.html` | Interactive API docs |
+| `GET` | `/actuator/prometheus` | Metrics for Prometheus / Grafana |
+| `GET` | `/actuator/health` | Health check |
+
+Example trace:
+
+```bash
+curl http://localhost:8080/api/logs/trace/0ced-...-57eb
 ```
-Insurance Logging System 1.0.0 running on http://localhost:8080
-  Logs:    ./logs (kept 90 days)
-  Metrics: http://localhost:8080/metrics
+```
+claims-service    CLAIM_SUBMITTED   CLM-7095   Claim submitted, customer phone *******678
+claims-service    CLAIM_APPROVED    CLM-7095   Claim CLM-7095 approved: assessed automatically
+payments-service  CLAIM_PAID        CLM-7095   Claim CLM-7095 paid out
 ```
 
-### Option 2: full stack with Grafana (Docker)
+Server settings (environment variables): `PORT` (8080), `LOG_DIR` (logs), `RETENTION_DAYS` (90), `MEMORY_CAPACITY` (50000), `INSURELOG_API_KEY` (if set, `/api/*` needs `X-API-Key`).
+
+Demo traffic from several pretend services:
+
+```bash
+java -jar insurelog-server-2.0.0.jar simulate --rate 10
+```
+
+---
+
+## Run everything with Grafana
 
 ```bash
 docker compose up --build
@@ -56,159 +200,56 @@ docker compose up --build
 
 | Service | URL |
 |---|---|
-| Logging API | http://localhost:8080 |
+| InsureLog server + Swagger | http://localhost:8080/swagger-ui.html |
+| Demo claims service | http://localhost:8081 |
 | Prometheus | http://localhost:9090 |
 | Grafana (admin / admin) | http://localhost:3000 |
 
-Then send demo traffic and open Grafana; the **Insurance Logging System** dashboard is the home page:
+The demo claims service generates live traffic, and the **Insurance Logging System** dashboard opens as Grafana's home page:
+
+- **Overview:** services reporting, events per second, claims submitted, approval rate, premiums collected, errors
+- **Microservices:** events and errors per service (pick services with the dropdown)
+- **Business activity:** events by category, claims by outcome, premiums by channel, claim amounts
+- **Risk:** payment failure rate, security events, rejected events
+- **Pipeline health:** shipper queue and drops in each service, server ingest latency, HTTP traffic, JVM heap and CPU per app
+
+To add your own services, add them to `monitoring/prometheus/prometheus.yml`.
+
+---
+
+## Build
 
 ```bash
-java -jar target/insurance-logging-system-1.0.0.jar simulate --rate 10
+mvn install          # builds and tests every module
 ```
 
----
+| Jar | Use |
+|---|---|
+| `insurelog-server/target/insurelog-server-2.0.0.jar` | Run the central server |
+| `insurelog-spring-boot-starter/target/insurelog-spring-boot-starter-2.0.0.jar` | Dependency for your microservices |
+| `insurelog-core/target/insurelog-core-2.0.0.jar` | Library for non-Spring Java apps |
+| `demo-claims-service/target/demo-claims-service-2.0.0.jar` | Example microservice |
 
-## Sending events
+**Using the starter from GitHub without publishing to Maven Central:** create a GitHub release (for example `v2.0.0`) and add [JitPack](https://jitpack.io):
 
-```bash
-curl -X POST http://localhost:8080/api/logs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "level": "INFO",
-    "category": "CLAIM",
-    "eventType": "CLAIM_SUBMITTED",
-    "message": "Claim submitted by customer on 0712345678",
-    "policyNumber": "POL-2024-778",
-    "claimId": "CLM-1001",
-    "customerId": "CUS-42",
-    "product": "Medical",
-    "amount": 45000,
-    "channel": "mpesa",
-    "attributes": { "region": "Nairobi", "nationalId": "12345678" }
-  }'
-```
+```xml
+<repositories>
+  <repository>
+    <id>jitpack.io</id>
+    <url>https://jitpack.io</url>
+  </repository>
+</repositories>
 
-Stored as:
-
-```json
-{
-  "id": "3f0c...",
-  "timestamp": "2026-11-25T08:15:30Z",
-  "level": "INFO",
-  "category": "CLAIM",
-  "eventType": "CLAIM_SUBMITTED",
-  "message": "Claim submitted by customer on *******678",
-  "policyNumber": "POL-2024-778",
-  "claimId": "CLM-1001",
-  "amount": 45000,
-  "currency": "KES",
-  "channel": "mpesa",
-  "attributes": { "region": "Nairobi", "nationalId": "[REDACTED]" }
-}
-```
-
-Required fields: `category`, `eventType` (UPPER_SNAKE_CASE) and `message`. Send an array to log up to 500 events at once.
-
-### Using it as a Java library
-
-```java
-InsuranceLogger log = InsuranceLogger.create(Path.of("logs"));
-
-log.policyCreated("POL-1001", "CUS-42", "Medical", 3_500);
-log.premiumPaid("POL-1001", 3_500, "mpesa");
-log.claimSubmitted("CLM-5001", "POL-1001", 45_000, "mpesa");
-log.claimDecision("CLM-5001", "POL-1001", true, 45_000, "assessed by J. Otieno");
-
-log.log(LogEvent.builder(Category.UNDERWRITING, "RISK_ASSESSED")
-        .policy("POL-1001").message("Risk score 0.32").build());
-
-String prometheusText = log.metrics().scrape();
-```
-
----
-
-## API
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/logs` | Log one event or an array of events |
-| `GET` | `/api/logs` | Search, newest first |
-| `GET` | `/api/logs/export` | Download as `format=csv` (default) or `format=json` |
-| `GET` | `/api/stats` | Counts by category and level |
-| `GET` | `/metrics` | Prometheus metrics |
-| `GET` | `/health` | Health check |
-
-Search and export filters: `level` (minimum, e.g. `WARN`), `category`, `eventType`, `policyNumber`, `claimId`, `customerId`, `since`, `until` (ISO-8601) and `limit`.
-
-```bash
-curl "http://localhost:8080/api/logs?category=CLAIM&level=WARN&limit=20"
-curl -OJ "http://localhost:8080/api/logs/export?format=csv&since=2026-11-01T00:00:00Z"
-```
-
-If `INSURELOG_API_KEY` is set, `/api/*` needs the header `X-API-Key: <key>`. `/metrics` and `/health` stay open for Prometheus and health checks.
-
----
-
-## Grafana dashboard
-
-`monitoring/grafana/dashboards/insurance-logging.json` contains:
-
-- **Overview**: events per second, claims submitted, claim approval rate, premiums collected, errors, rejected events
-- **Business activity**: events by category, claims by outcome, premiums by channel, claim amounts (median, 95th percentile, paid out)
-- **Risk and errors**: payment failure rate, warnings and errors by level, security events such as failed logins
-- **Service health**: ingest latency (p50/p95/p99), JVM heap, uptime, CPU
-
-To use your own Grafana, add a Prometheus data source that scrapes `http://<host>:8080/metrics`, then import the dashboard JSON.
-
-### Metrics
-
-| Metric | Labels | Meaning |
-|---|---|---|
-| `insurelog_events_total` | category, event_type, level, channel | Events received |
-| `insurelog_claims_total` | outcome (submitted, approved, rejected, paid) | Claims by outcome |
-| `insurelog_amount_kes` | category, event_type, channel | Amounts in KES (count, sum, max, p50, p95) |
-| `insurelog_rejected_events_total` | reason | Invalid events refused |
-| `insurelog_ingest_seconds` | | Time to validate, mask and store events |
-| `jvm_*`, `process_*`, `system_*` | | JVM memory, GC, threads, CPU, uptime |
-
----
-
-## Configuration
-
-| Option | Environment variable | Default |
-|---|---|---|
-| `--port` | `PORT` | `8080` |
-| `--log-dir` | `LOG_DIR` | `./logs` |
-| `--retention-days` | `RETENTION_DAYS` | `90` |
-| `--memory-capacity` | `MEMORY_CAPACITY` | `50000` events kept in memory for search |
-| `--api-key` | `INSURELOG_API_KEY` | not required |
-
-```bash
-java -jar insurance-logging-system-1.0.0.jar --help
-```
-
----
-
-## Project structure
-
-```
-src/main/java/com/felixkariuki/insurelog/
-  App.java                  command line (serve, simulate)
-  model/                    LogEvent, Level, Category, LogQuery
-  core/                     InsuranceLogger, PiiMasker, EventValidator, LogStore
-  metrics/                  InsuranceMetrics (Micrometer + Prometheus)
-  http/                     ApiServer, CsvExporter
-  sim/                      TrafficSimulator
-monitoring/                 Prometheus config and Grafana provisioning + dashboard
+<dependency>
+  <groupId>com.github.101feliki.java-logging-system</groupId>
+  <artifactId>insurelog-spring-boot-starter</artifactId>
+  <version>v2.0.0</version>
+</dependency>
 ```
 
 ## Tests
 
-```bash
-mvn test
-```
-
-Covers PII masking, validation, file storage and restart recovery, search filters, metrics, the HTTP API, API keys and CSV export.
+26 tests cover PII masking, validation, storage and restart recovery, non-blocking shipping and shutdown flushing, Spring auto-configuration, **correlation IDs passed between services over HTTP**, the server API, API keys, CSV export and the demo service's full claim journey.
 
 ## Author
 

@@ -1,13 +1,31 @@
 services:
-  insurelog:
-    build: .
+  # Central collector: stores, searches and exports events from every microservice
+  insurelog-server:
+    build:
+      context: .
+      args:
+        MODULE: insurelog-server
     ports:
       - "8080:8080"
     environment:
       RETENTION_DAYS: 90
-      # INSURELOG_API_KEY: change-me   # uncomment to require X-API-Key on /api/*
+      # INSURELOG_API_KEY: change-me   # if set, give the same key to every microservice
     volumes:
       - insurelog-logs:/app/logs
+
+  # Example microservice using the starter, generating live demo traffic
+  claims-service:
+    build:
+      context: .
+      args:
+        MODULE: demo-claims-service
+    ports:
+      - "8081:8081"
+    environment:
+      INSURELOG_SERVER_URL: http://insurelog-server:8080
+      DEMO_TRAFFIC: "true"
+    depends_on:
+      - insurelog-server
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -17,7 +35,8 @@ services:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     depends_on:
-      - insurelog
+      - insurelog-server
+      - claims-service
 
   grafana:
     image: grafana/grafana:11.3.0
