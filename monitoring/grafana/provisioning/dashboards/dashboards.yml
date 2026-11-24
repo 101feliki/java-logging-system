@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: Insurance Logging System
+    folder: Insurance
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
